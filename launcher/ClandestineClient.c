@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <sys/stat.h>
-#include <sys/syscall.h> //https://github.com/torvalds/linux/blob/master/include/linux/syscalls.h
+#include <sys/syscall.h>
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
@@ -270,7 +270,7 @@ int main(int argc, char** argv) {
                     }
                     break;
                 case 5:
-                    if () {
+                    if (context.data_ready) {
                         do_sig(SIGSENDNET);
                         context.rHost_set   = 0;
                         context.rPort_set   = 0;
