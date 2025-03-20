@@ -23,7 +23,7 @@ module_init(ClandestineCore_init);
 ```
 
 Pourquoi do_send_sig_info ? \
-Dans la hierarchie de l'appel kill : 
+Dans la hiérarchie de l'appel kill : 
 - kill(...) &nbsp;&nbsp;&nbsp;&nbsp;-> `return __sysret(sys_kill(pid, signal));` 
 - sys_kill(..) &nbsp;-> `return my_syscall2(__NR_kill, pid, signal);`
 - __NR_kill &nbsp;&nbsp;-> `return kill_something_info(sig, &info, pid);`
@@ -34,7 +34,7 @@ Dans la hierarchie de l'appel kill :
     - `group_send_sig_info(...)` : `ret = do_send_sig_info(sig, info, p, type);`
 
 
-Chaque appel attaché est comparer a une liste d'appel fixé : 
+Chaque appel attaché est comparé a une liste d'appel fixée : 
 ```c
 #define SIGALWRECV 51
 #define SIGREMRECV 52
@@ -50,7 +50,7 @@ Les fonctions kprobe on deux arguments : \
 `pt_regs` reprend les registres au moment de l'appel du syscall et est défini par : 
 ```c
 struct pt_regs {
-        Ordre exact dépend du noyau, mais on y retrouve :
+        //L'Ordre exact dépend du noyau, mais on y retrouve :
         unsigned long r15;
         unsigned long r14;
         unsigned long r13;
@@ -119,20 +119,20 @@ static const struct file_operations fops = {
 ```
 Je traite des 'callbacks' du device plus loin.
 
-#### kSIREMRECV
+#### kSIGREMRECV
 Permet uniquement de fermer le device avec un `misc_deregister(&misc_device)`.
 
 #### kSIGHIDEMOD / kSIGUNHIDEM
-Pour cacher le module de la liste des modules, j'ai d'abord essayé de comprendre comment marchais l'outils busybox lsmod.
+Pour cacher le module de la liste des modules, j'ai d'abord essayé de comprendre comment fonctionnait l'outil busybox lsmod.
 
-Pour le coup c'est assez simple, il lit `/proc/modules` tokenise et format l'affichage selon des conditions. Car c'est ce fichier qui permet d'exporter la liste des modules _(comme /proc/kallsyms pour les symboles kernels)_
+En fait, c'est assez simple, il lit `/proc/modules` tokenise et formate l'affichage selon des conditions. Car c'est ce fichier qui permet d'exporter la liste des modules _(comme /proc/kallsyms pour les symboles kernels)_
 
-J'ai donc regardé comment etais fait insmod (car j'en ai aussi eu besoin pour ClandestineClient) le binaire fait appel à bb_init_module(...) qui ensuite fait appel à init_module !
+J'ai donc regardé comment étais fait insmod (car j'en ai aussi eu besoin pour ClandestineClient) le binaire fait appel à bb_init_module(...) qui ensuite fait appel à init_module !
 
 Qui est défini dans le kernel par : 
 `#define init_module(mod, len, opts) syscall(__NR_init_module, mod, len, opts)`
 
-C'est donc le code du syscall `__NR_init_module` qu'il faut regardé ! Mais le syscall fait ensuite appel à `load_module` 
+C'est donc le code du syscall `__NR_init_module` qu'il faut regardé ! Mais le syscall fait ensuite appel à `load_module`.
 
 Dans le code de la fonction ([Code (elixir.bootlin.com)](https://elixir.bootlin.com/linux/v6.12.6/source/kernel/module/main.c#L2854)) on comprend que c'est une linked list dont il suffit de sauvegarder les points de références et de modifier le module précédent pour qu'il pointe vers le suivant.
 
@@ -164,32 +164,75 @@ list_add(&THIS_MODULE->list, save_previous_mod);
 ```
 
 #### kSIGSENDNET (v1)
-Pour cette partie j'envoie simplement des données via un socket tcp (Donc visible en espace user (e.g wireshark) mais en kernel-space) 
-- Creation du sock
+Pour cette partie j'envoie simplement des données via un socket TCP (Donc visible en espace user (e.g wireshark) mais en kernel-space) 
+- Création du sock
 - Setup de la destination et du payload
 - Connect le sock
-- Envoie le payload via `kernel_sendmsg()`
+- Envoi le payload via `kernel_sendmsg()`
 
 `int kernel_sendmsg(struct socket * sock, struct msghdr * msg, struct kvec * vec, size_t num, size_t size)`\
 Il y a deux structure à comprendre : 
- - `kvec` -> Equivalent de iovec en user-space permet de definir un buffer I/O de la communication.
-    - `iov_base` -> On met le ptr vers le buffer qu'on va envoyer
-    - `iov_len`  -> taille du buffer a envoyer
- - `msghdr` -> NULL car le socket est déjà connecter a cette étape
+ - `kvec` -> érquivalent de iovec en user-space permet de definir un buffer I/O de la communication.
+    - `iov_base` -> Pointeur vers le buffer à envoyer
+    - `iov_len`  -> Taille du buffer a envoyer
+ - `msghdr` -> NULL car le socket est déjà connecté à cette étape
 
 TODO (v2): 
-- Envoyer le paquet sans utilise de socket : 
-- Obtenir un pointeur vers le net_device correspondant (ex. "eth0") avec dev_get_by_name().
-- Utiliser alloc_skb() en réservant suffisamment d'espace pour les en-têtes et les données (payload).
-- Construire les en-têtes
-    En-tête Ethernet (si nécessaire, ou laissé à la couche de liaison selon le contexte)
-    En-tête IP
-    En-tête UDP/TCP
-    Remplissez les champs nécessaires (version, longueur totale, adresses, checksum, etc.).
+- Envoyer le paquet sans utiliser de socket :
+    - Obtenir un pointeur vers le net_device correspondant (ex. "eth0") avec dev_get_by_name().
+    - Utiliser alloc_skb() en réservant suffisamment d'espace pour les en-têtes et les données (payload).
+    - Construire les en-têtes
+        - En-tête Ethernet (si nécessaire, ou laissé à la couche de liaison selon le contexte)
+        - En-tête IP
+        - En-tête UDP/TCP
+        - Remplir les champs nécessaires (version, longueur totale, adresses, checksum, etc.).
 
 - Recopier la charge utile dans la zone de données du sk_buff.
-- Définir skb->dev et appelez dev_queue_xmit(skb).
-- Utiliser dev_put() pour relâcher le net_device, et assurez-vous de gérer les erreurs.
+- Définir skb->dev et appeler dev_queue_xmit(skb).
+- Utiliser dev_put() pour relâcher le net_device et gérer les erreurs.
+
+### Devices
+
+Pour rappel, la structure du device enregistré est (en partie) définie par :
+```c
+static const struct file_operations fops = {
+    .owner          = THIS_MODULE,
+    .open           = misc_device_open,
+    .release        = misc_device_release,
+    .unlocked_ioctl = misc_device_ioctl,
+};
+```
+
+#### misc_device_open / misc_device_release
+
+Permet de gérer les conflits d'ouverture et de fermeture du device.
+
+#### misc_device_ioctl
+
+Le device est à l'écoute pour un IOCTL. Les données IOCTL sont envoyées avec une structure définie comme ci-dessous : 
+```c
+struct ioctl_data {
+    size_t size; 
+    char buffer[IOCTL_BUFF_SIZE];
+};
+```
+
+Cela me permet d'envoyer des données de tailles variables, en effectuant un kmalloc relatif au buffer, malgré le fait que les données transmises proviennent de l'espace user (__\_\_user *__).
+
+L'ID de l'IOCTL est passé en argument de la fonction :  `cmd`.
+
+*static long misc_device_ioctl(struct file *file, unsigned int __cmd__, unsigned long arg)* 
+
+Donc, selon la valeur de `cmd` qui attend une de ces valeurs : 
+```c
+#define IOCTL_IP    0x100
+#define IOCTL_PORT  0x200
+#define IOCTL_DATA  0x300
+```
+Une fonctionnalité differente sera, effectuée.
+- *IOCTL_IP* : Récupère l'IP passé en argument de l'IOCTL et popule rHost
+- *IOCTL_PORT* : Même chose mais pour le port
+- *IOCTL_DATA* : Même chose mais pour les donnée du payload
 
 ---
 ##### References :
