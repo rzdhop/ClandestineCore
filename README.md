@@ -1,5 +1,9 @@
-# ClandestineDoc
-Un super Rootkit kernel ! 
+![KNX-CA Windows Logo](assets/ClandestinLogo.png)
+# ClandestineDoc for ClandestineCore
+> Un super Rootkit kernel !
+
+[![Language](https://img.shields.io/badge/ClandestineCore-C-blue.svg)](https://google.fr/)
+
 
 ### Fonctionnalités 
 --- 
@@ -265,3 +269,6 @@ modules :
 # ClandestinClient
 Un super client pour un super rootkit kernel !
 
+
+# Credits : 
+- absel.exe
