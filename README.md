@@ -258,7 +258,7 @@ Une fonctionnalité differente sera, effectuée.
 
 - https://github.com/m0nad/Diamorphine/blob/master/diamorphine.c
 
-signals :
+signaux :
   - https://stackoverflow.com/questions/2485028/signal-handling-in-c
   - https://github.com/torvalds/linux/blob/master/include/linux/syscalls.h
 
@@ -269,6 +269,35 @@ modules :
 # ClandestinClient
 Un super client pour un super rootkit kernel !
 
+Le client/launcher va créer un handler pour les signaux : 
+```c
+#define SIGALWRECV 51
+#define SIGREMRECV 52
+#define SIGHIDEMOD 53
+#define SIGUNHIDEM 54
+#define SIGSENDNET 55
+```
+Chaque signal sera alors intércepté par le rootkit, et chaque signal correspons a une actions détaillé prcédement dans le rootkit. 
+Les différentes fonctionnalités lié a ces signaux ne sont donc pas effetuer par le laucher, le handle redirige vers une fonction vide : 
+```c
+void signal_handler(int signum) {
+}
+
+void setup_signal_handlers(void) {
+    struct sigaction sa;
+    sa.sa_handler = signal_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+
+    for (int sig = SIGALWRECV; sig <= SIGSENDNET; sig++) {
+        if (sigaction(sig, &sa, NULL) < 0) {
+            perror("sigaction");
+        }
+    }
+}
+```
+
+Pour la suite des fonctionnalité, 
 
 # Credits : 
 - absel.exe
