@@ -302,4 +302,4 @@ void setup_signal_handlers(void) {
 Pour la suite des fonctionnalité, 
 
 # Credits : 
-- absel.exe
+- rzdhop
